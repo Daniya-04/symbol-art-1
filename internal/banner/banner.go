@@ -30,6 +30,14 @@ func Load(path string) (Banner, error) {
 		return nil, err
 	}
 
+	b := make(Banner)
+	for i:=32; i< 127; i++{
+		start := (i - 32) * 9
+		end := start + 8
+		b[rune(i)] = allLines[start:end]
+	}
+
+	return b, nil
 	// TODO: здесь allLines уже содержит ВСЕ строки файла.
 	// Дальше — ваша часть из пункта 3 TODO-списка ниже: пройтись по
 	// allLines блоками по 9 строк (1 разделитель + 8 строк символа) и
@@ -43,7 +51,7 @@ func Load(path string) (Banner, error) {
 func Validate(sl []rune) bool {
 
 	for _, v := range sl {
-		if v <= 32 || v >= 126 {
+		if (v < 32 || v > 126) || v != 10 {
 			return false
 		}
 	}
