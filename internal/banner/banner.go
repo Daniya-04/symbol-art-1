@@ -58,6 +58,10 @@ func Validate(sl []rune) bool {
 	return true
 }
 
+func (b Banner) Get(r rune) []string {
+	return b[r]
+}
+
 // 1. Определить тип для хранения баннера, например:
 //    type Banner map[rune][]string
 //    где значение — срез из 8 строк, представляющих символ.
