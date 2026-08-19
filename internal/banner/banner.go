@@ -14,7 +14,17 @@ import (
 
 type Banner map[rune][]string // Обьявили свой тип с навзанием Банер Мап - ключ - значение
 
-func Load(path string) (Banner, error) {
+func Render(path string, input string) ([]string, error){
+	banner, err := Load(path)
+	if err != nil {
+		return nil, err
+	}
+	return renderword(banner, input)
+}
+
+
+
+func Load(path string) ( Banner, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -30,23 +40,39 @@ func Load(path string) (Banner, error) {
 		return nil, err
 	}
 
-	b := make(Banner)
+	b := make(Banner,95)
 	for i:=32; i< 127; i++{
 		start := (i - 32) * 9
 		end := start + 8
 		b[rune(i)] = allLines[start:end]
 	}
-
 	return b, nil
+}
+
 	// TODO: здесь allLines уже содержит ВСЕ строки файла.
 	// Дальше — ваша часть из пункта 3 TODO-списка ниже: пройтись по
 	// allLines блоками по 9 строк (1 разделитель + 8 строк символа) и
 	// заполнить Banner.
-}
+
 
 // func BannerCheck(input string) map[string][][]string {
 
 // }
+
+
+func renderword(b Banner, input string) ([]string, error) {
+	blocks := make([][]string,len(input))
+	for i, char:= range input{
+		blocks[i] = b[char]
+	}
+	result := make([]string, 8)
+	for h := 0; h < 8; h++ {
+		for _, block := range blocks {
+			result[h] += block[h]
+		}
+	}
+	return result, nil
+}
 
 func Validate(sl []rune) bool {
 
@@ -57,11 +83,6 @@ func Validate(sl []rune) bool {
 	}
 	return true
 }
-
-func (b Banner) Get(r rune) []string {
-	return b[r]
-}
-
 // 1. Определить тип для хранения баннера, например:
 //    type Banner map[rune][]string
 //    где значение — срез из 8 строк, представляющих символ.
