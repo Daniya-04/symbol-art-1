@@ -9,141 +9,100 @@ package banner
 
 import (
 	"bufio"
+	"fmt"
 	"os"
+	"strings"
 )
 
-type Banner map[rune][]string // Обьявили свой тип с навзанием Банер Мап - ключ - значение
+const (
+	// Height — сколько строк занимает один символ в баннере.
+	// Height is how many lines a single character occupies.
+	Height = 8
 
-func Render(path string, input string) ([]string, error){
-	banner, err := Load(path)
-	if err != nil {
-		return nil, err
-	}
-	return renderword(banner, input)
-}
+	// First и Last — границы диапазона символов, описанных в файле:
+	// от пробела (32) до тильды (126) включительно.
+	// First and Last are the bounds of the character range stored in a
+	// banner file: from space (32) up to tilde (126), inclusive.
+	First = ' '
+	Last  = '~'
 
+	// stride — размер одного блока в файле: пустая строка-разделитель + 8 строк.
+	// stride is the size of one block in the file: a blank separator + 8 lines.
+	stride = Height + 1
 
+	// Count — количество описанных символов (95).
+	// Count is the number of described characters (95).
+	Count = int(Last-First) + 1
+)
 
-func Load(path string) ( Banner, error) {
+// Banner хранит для каждой печатной руны её ASCII-блок из Height строк.
+// Banner maps every printable rune to its Height-line ASCII block.
+type Banner map[rune][]string
+
+// Load читает файл-баннер и раскладывает его на блоки по символам.
+//
+// Формат файла проверен по реальным standard.txt / shadow.txt / thinkertoy.txt:
+// файл начинается с пустой строки, затем идут ровно 8 строк символа, затем
+// снова пустая строка и т.д. Итого Count*stride == 855 строк.
+//
+// Load reads a banner file and splits it into per-character blocks. The file
+// starts with a blank line, followed by exactly 8 lines for a character, then
+// another blank line, and so on — Count*stride == 855 lines in total.
+func Load(path string) (Banner, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("banner: %w", err)
 	}
 	defer file.Close()
 
-	var allLines []string
+	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
-		allLines = append(allLines, scanner.Text())
+		// Файлы могут прийти с CRLF — \r ломает выравнивание блоков.
+		// Files may arrive with CRLF line endings; a stray \r breaks alignment.
+		lines = append(lines, strings.TrimSuffix(scanner.Text(), "\r"))
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("banner: reading %s: %w", path, err)
 	}
 
-	b := make(Banner,95)
-	for i:=32; i< 127; i++{
-		start := (i - 32) * 9
-		end := start + 8
-		b[rune(i)] = allLines[start:end]
+	want := Count * stride
+	if len(lines) != want {
+		return nil, fmt.Errorf("banner: %s is malformed: got %d lines, want %d", path, len(lines), want)
+	}
+
+	b := make(Banner, Count)
+	for i := 0; i < Count; i++ {
+		// +1 — пропускаем пустую строку-разделитель перед блоком.
+		// +1 skips the blank separator line that precedes each block.
+		start := i*stride + 1
+		if lines[start-1] != "" {
+			return nil, fmt.Errorf("banner: %s is malformed: line %d must be a blank separator", path, start)
+		}
+		// Копируем срез: иначе блоки остались бы окнами в один общий массив,
+		// и любая правка одного блока задела бы соседние.
+		// Copy the slice: otherwise blocks would be windows into one shared
+		// array and mutating one block would corrupt its neighbours.
+		block := make([]string, Height)
+		copy(block, lines[start:start+Height])
+		b[First+rune(i)] = block
 	}
 	return b, nil
 }
 
-	// TODO: здесь allLines уже содержит ВСЕ строки файла.
-	// Дальше — ваша часть из пункта 3 TODO-списка ниже: пройтись по
-	// allLines блоками по 9 строк (1 разделитель + 8 строк символа) и
-	// заполнить Banner.
-
-
-// func BannerCheck(input string) map[string][][]string {
-
-// }
-
-
-func renderword(b Banner, input string) ([]string, error) {
-	blocks := make([][]string,len(input))
-	for i, char:= range input{
-		blocks[i] = b[char]
-	}
-	result := make([]string, 8)
-	for h := 0; h < 8; h++ {
-		for _, block := range blocks {
-			result[h] += block[h]
-		}
-	}
-	return result, nil
-}
-
+// Validate сообщает, состоит ли строка только из допустимых рун: печатный
+// ASCII 32..126 либо перевод строки \n (10).
+//
+// Validate reports whether every rune is allowed: printable ASCII 32..126, or
+// a newline \n (10).
 func Validate(sl []rune) bool {
-
 	for _, v := range sl {
-		if (v < 32 || v > 126) || v != 10 {
+		if v == '\n' {
+			continue
+		}
+		if v < First || v > Last {
 			return false
 		}
 	}
 	return true
 }
-// 1. Определить тип для хранения баннера, например:
-//    type Banner map[rune][]string
-//    где значение — срез из 8 строк, представляющих символ.
-// 2. Реализовать функцию загрузки файла баннера с диска, используя только
-//    стандартный пакет os / io (без внешних библиотек), например:
-//    func Load(path string) (Banner, error)
-//    - Открыть файл, прочитать построчно.
-//    - Баннер описывает символы по порядку начиная с пробела (код 32) и
-//      далее по возрастанию ASCII-кода до кода 126.
-//    - Каждый символ занимает ровно 8 строк, блоки разделены одной пустой
-//      строкой (нужно свериться с реальным форматом входных файлов).
-// 3. Продумать, как разбить файл на блоки по 8 строк и сопоставить каждый
-//    блок с соответствующим руной (rune), начиная с ' ' (32) и увеличивая
-//    код на 1 для каждого следующего блока.
-// 4. Реализовать функцию получения блока символа:
-//    func (b Banner) Get(r rune) []string
-//    - Вернуть 8 строк для символа r.
-//    - Продумать поведение для символов вне диапазона 32-126 (не должно
-//      происходить, если Validate вызывается заранее, но стоит решить,
-//      что возвращать на всякий случай).
-// 5. Исправить/реализовать функцию Validate(sl []rune) bool:
-//    - Должна возвращать true, если все руны — печатные ASCII (32-126)
-//      ЛИБО символ новой строки \n.
-//    - Текущая сигнатура использует v <= 32 || v >= 126, что неверно
-//      (нужно понять, почему это неверно, и передумать условие: пробел
-//      это код 32 и он ДОЛЖЕН быть валиден, а 126 '~' тоже валиден).
-//    - Учесть, что \n (код 10) тоже должен считаться допустимым, так как
-//      по условию входная строка может содержать \n.
-// 6. Решить, где хранить путь к файлам баннеров по умолчанию (standard.txt
-//    как банер по умолчанию) и как их встраивать в сборку (обычные файлы
-//    рядом с go.mod, читаемые в рантайме).
-//
-// TODO (EN):
-// 1. Define a type to store a banner, e.g.:
-//    type Banner map[rune][]string
-//    where the value is a slice of 8 strings representing one character.
-// 2. Implement a function to load a banner file from disk using only the
-//    standard os / io packages (no external libraries), e.g.:
-//    func Load(path string) (Banner, error)
-//    - Open the file, read it line by line.
-//    - The banner describes characters in order starting from space
-//      (code 32) and increasing by ASCII code up to code 126.
-//    - Each character occupies exactly 8 lines, blocks are separated by a
-//      blank line (verify this against the actual provided banner files).
-// 3. Work out how to split the file into 8-line blocks and map each block
-//    to its corresponding rune, starting at ' ' (32) and incrementing the
-//    code by 1 for every following block.
-// 4. Implement a function to fetch a character's block:
-//    func (b Banner) Get(r rune) []string
-//    - Return the 8 lines for character r.
-//    - Decide what should happen for characters outside the 32-126 range
-//      (should not happen if Validate is called first, but decide on a
-//      safe fallback anyway).
-// 5. Fix/implement the Validate(sl []rune) bool function:
-//    - Should return true only if every rune is either printable ASCII
-//      (32-126) OR a newline character \n.
-//    - The current signature uses v <= 32 || v >= 126, which is incorrect
-//      (work out why: space is code 32 and MUST be valid, and 126 '~' is
-//      also valid, so re-think the condition).
-//    - Remember that \n (code 10) must also be treated as valid, since the
-//      input string is allowed to contain \n per the spec.
-// 6. Decide where the default banner files live (standard.txt as the
-//    default banner) and how they get read at runtime (plain files next to
-//    go.mod, read at program startup).
