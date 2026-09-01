@@ -7,137 +7,230 @@
 // (--analyze), and generating text suggestions (--suggest).
 package analyzer
 
-// TODO (RU):
-// 1. Все функции анализа должны работать с ИСХОДНОЙ входной строкой,
-//    а не с отрендеренным ASCII-артом (art используется только для
-//    Art Dimensions).
-// 2. Реализовать структуру для хранения результатов классификации символов:
-//    type Breakdown struct {
-//        Uppercase int
-//        Lowercase int
-//        Digits    int
-//        Special   int
-//        Spaces    int
-//    }
-//    func ClassifyChars(input string) Breakdown
-//    - Пройтись циклом по рунам строки и на основе условий (без regexp)
-//      определить категорию каждого символа.
-//    - Продумать, какие стандартные библиотечные идеи Go могут помочь
-//      определить категорию символа (диапазоны кодов ASCII, простые
-//      сравнения), не используя сразу готовые функции — сначала понять
-//      логику самому.
-//    - Уточнить: символ \n и обычный пробел ' ' — оба считаются как
-//      Spaces? Или \n не считается вовсе? Разобраться на примерах задания.
-//    - Special — всё, что не буква, не цифра и не пробельный символ,
-//      в пределах печатных ASCII (32-126).
-// 3. Реализовать обнаружение паттернов:
-//    type Patterns struct {
-//        MixedCase        bool
-//        RepeatedChars    []string // или подобная структура для описания найденных повторов
-//        NumericSequences []string // например ["2024"]
-//    }
-//    func DetectPatterns(input string) Patterns
-//    - Mixed case: есть хотя бы одна заглавная И хотя бы одна строчная буква.
-//    - Repeated characters: два и более одинаковых символа подряд (например "oo").
-//      Продумать, нужно ли выводить конкретный найденный повтор или только факт.
-//    - Numeric sequences: два и более цифр подряд, нужно определить сами
-//      подстроки-последовательности (например "2024", "123") для вывода
-//      в формате `Numeric sequence: "2024"`.
-// 4. Реализовать вычисление показателя сложности:
-//    func ComplexityScore(input string) float64
-//    - Formula: (Unique_Characters / Total_Characters) * 100
-//    - Подсчёт РЕГИСТРОЗАВИСИМЫЙ (A и a — разные символы).
-//    - Округление до 2 знаков после запятой (math.Round или strconv с
-//      форматированием "%.2f").
-//    - Продумать заранее (до кода): почему регистрозависимый подсчёт
-//      меняет результат по сравнению с регистронезависимым? Предсказать
-//      результат для короткой строки перед написанием кода.
-// 5. Реализовать форматированный вывод блока анализа:
-//    func FormatAnalysis(input string, artHeight, artWidth int) string
-//    - Должен точно повторять формат из задания:
-//      "--- AI Analysis ---", "Character Breakdown:", "Patterns Detected:",
-//      "Complexity Score: XX.XX%", "Art Dimensions: X lines × X characters".
-//    - Если паттерны не обнаружены — решить, что выводить (пустой список?
-//      строку "None detected"? Уточнить по примерам — в примерах всегда
-//      есть хотя бы один паттерн).
-// 6. Реализовать функцию генерации предложений (--suggest):
-//    func Suggest(input string, artHeight, artWidth int) []string
-//    - На основе регистра (все строчные -> предложить UPPER, все
-//      заглавные -> предложить lower, и т.д.).
-//    - На основе наличия/отсутствия знаков препинания.
-//    - На основе длины строки (одно слово / несколько слов).
-//    - На основе пробельных паттернов (много пробелов подряд, начальные/
-//      конечные пробелы и т.д.).
-//    - Обязательно включить строку с размерами вывода:
-//      "Output dimensions: X lines × Y characters."
-// 7. Реализовать форматированный вывод блока предложений:
-//    func FormatSuggestions(suggestions []string) string
-//    - Формат: "--- AI Suggestions ---" и список строк с "- " в начале.
+import (
+	"fmt"
+	"math"
+	"strings"
+)
+
+// Breakdown хранит количество символов каждой категории во входной строке.
 //
-// TODO (EN):
-// 1. All analysis functions must operate on the ORIGINAL input string, not
-//    the rendered ASCII art (the art is only used for Art Dimensions).
-// 2. Implement a struct to hold character classification results:
-//    type Breakdown struct {
-//        Uppercase int
-//        Lowercase int
-//        Digits    int
-//        Special   int
-//        Spaces    int
-//    }
-//    func ClassifyChars(input string) Breakdown
-//    - Loop over the runes of the string and, using conditionals (no
-//      regexp), determine each character's category.
-//    - Think about which standard-library ideas in Go could help decide a
-//      character's category (ASCII code ranges, simple comparisons)
-//      without immediately reaching for ready-made functions — work out
-//      the logic yourself first.
-//    - Clarify: is \n counted as a space, along with a regular ' '? Or is
-//      \n excluded entirely? Work this out from the spec's examples.
-//    - Special is anything that's not a letter, not a digit, and not
-//      whitespace, within the printable ASCII range (32-126).
-// 3. Implement pattern detection:
-//    type Patterns struct {
-//        MixedCase        bool
-//        RepeatedChars    []string // or similar structure describing found repeats
-//        NumericSequences []string // e.g. ["2024"]
-//    }
-//    func DetectPatterns(input string) Patterns
-//    - Mixed case: at least one uppercase AND at least one lowercase letter.
-//    - Repeated characters: two or more identical characters in a row
-//      (e.g. "oo"). Decide whether to report the specific repeat found or
-//      just the fact that one exists.
-//    - Numeric sequences: two or more digits in a row; you need to extract
-//      the actual matching substrings (e.g. "2024", "123") to print them
-//      as `Numeric sequence: "2024"`.
-// 4. Implement the complexity score calculation:
-//    func ComplexityScore(input string) float64
-//    - Formula: (Unique_Characters / Total_Characters) * 100
-//    - Counting is CASE-SENSITIVE (A and a are distinct characters).
-//    - Round to 2 decimal places (math.Round or strconv formatting with
-//      "%.2f").
-//    - Think it through before coding: why does case-sensitive counting
-//      change the result compared to case-insensitive counting? Predict
-//      the result for a short string before writing any code.
-// 5. Implement formatted output for the analysis block:
-//    func FormatAnalysis(input string, artHeight, artWidth int) string
-//    - Must exactly match the format from the spec:
-//      "--- AI Analysis ---", "Character Breakdown:", "Patterns Detected:",
-//      "Complexity Score: XX.XX%", "Art Dimensions: X lines × X characters".
-//    - If no patterns are detected, decide what to print (empty list? a
-//      "None detected" line? Check the examples — they always contain at
-//      least one pattern).
-// 6. Implement the suggestion generation function (--suggest):
-//    func Suggest(input string, artHeight, artWidth int) []string
-//    - Based on case (all lowercase -> suggest UPPER, all uppercase ->
-//      suggest lower, etc).
-//    - Based on presence/absence of punctuation.
-//    - Based on string length (single word vs multiple words).
-//    - Based on whitespace patterns (repeated spaces, leading/trailing
-//      spaces, etc).
-//    - Must always include an output-dimensions line:
-//      "Output dimensions: X lines × Y characters."
-// 7. Implement formatted output for the suggestions block:
-//    func FormatSuggestions(suggestions []string) string
-//    - Format: "--- AI Suggestions ---" followed by a list of lines each
-//      starting with "- ".
+// Breakdown holds the count of each character category in the input string.
+type Breakdown struct {
+	Uppercase int
+	Lowercase int
+	Digits    int
+	Special   int
+	Spaces    int
+}
+
+// ClassifyChars классифицирует каждую руну input: заглавная/строчная буква,
+// цифра, пробел (включая \n) или спецсимвол (всё остальное в 32-126).
+//
+// ClassifyChars classifies every rune of input: uppercase/lowercase letter,
+// digit, whitespace (including \n), or special (everything else in 32-126).
+func ClassifyChars(input string) Breakdown {
+	var b Breakdown
+	for _, r := range input {
+		switch {
+		case r == ' ' || r == '\n':
+			b.Spaces++
+		case r >= 'A' && r <= 'Z':
+			b.Uppercase++
+		case r >= 'a' && r <= 'z':
+			b.Lowercase++
+		case r >= '0' && r <= '9':
+			b.Digits++
+		default:
+			b.Special++
+		}
+	}
+	return b
+}
+
+// Patterns хранит результаты обнаружения паттернов во входной строке.
+//
+// Patterns holds the pattern-detection results for the input string.
+type Patterns struct {
+	MixedCase        bool
+	RepeatedChars    []string
+	NumericSequences []string
+}
+
+// DetectPatterns ищет смешанный регистр, повторяющиеся подряд символы (2+)
+// и числовые последовательности (2+ цифры подряд).
+//
+// DetectPatterns looks for mixed case, runs of 2+ identical characters in a
+// row, and numeric sequences of 2+ digits in a row.
+func DetectPatterns(input string) Patterns {
+	runes := []rune(input)
+
+	var p Patterns
+	hasUpper, hasLower := false, false
+	for _, r := range runes {
+		if r >= 'A' && r <= 'Z' {
+			hasUpper = true
+		}
+		if r >= 'a' && r <= 'z' {
+			hasLower = true
+		}
+	}
+	p.MixedCase = hasUpper && hasLower
+
+	for i := 0; i < len(runes); {
+		j := i + 1
+		for j < len(runes) && runes[j] == runes[i] {
+			j++
+		}
+		if j-i >= 2 {
+			p.RepeatedChars = append(p.RepeatedChars, string(runes[i:j]))
+		}
+		i = j
+	}
+
+	for i := 0; i < len(runes); {
+		if runes[i] < '0' || runes[i] > '9' {
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(runes) && runes[j] >= '0' && runes[j] <= '9' {
+			j++
+		}
+		if j-i >= 2 {
+			p.NumericSequences = append(p.NumericSequences, string(runes[i:j]))
+		}
+		i = j
+	}
+
+	return p
+}
+
+// ComplexityScore вычисляет (Unique_Characters / Total_Characters) * 100,
+// подсчёт регистрозависимый, округление до 2 знаков после запятой.
+//
+// ComplexityScore computes (Unique_Characters / Total_Characters) * 100,
+// case-sensitive, rounded to 2 decimal places.
+func ComplexityScore(input string) float64 {
+	if input == "" {
+		return 0
+	}
+	seen := make(map[rune]bool)
+	total := 0
+	for _, r := range input {
+		seen[r] = true
+		total++
+	}
+	score := float64(len(seen)) / float64(total) * 100
+	return math.Round(score*100) / 100
+}
+
+// FormatAnalysis форматирует блок "--- AI Analysis ---" для input,
+// используя artHeight/artWidth для строки Art Dimensions.
+//
+// FormatAnalysis formats the "--- AI Analysis ---" block for input, using
+// artHeight/artWidth for the Art Dimensions line.
+func FormatAnalysis(input string, artHeight, artWidth int) string {
+	b := ClassifyChars(input)
+	p := DetectPatterns(input)
+	score := ComplexityScore(input)
+
+	var sb strings.Builder
+	sb.WriteString("--- AI Analysis ---\n")
+	sb.WriteString("Character Breakdown:\n")
+	fmt.Fprintf(&sb, "- Uppercase: %d\n", b.Uppercase)
+	fmt.Fprintf(&sb, "- Lowercase: %d\n", b.Lowercase)
+	fmt.Fprintf(&sb, "- Digits: %d\n", b.Digits)
+	fmt.Fprintf(&sb, "- Special characters: %d\n", b.Special)
+	fmt.Fprintf(&sb, "- Spaces: %d\n", b.Spaces)
+
+	sb.WriteString("Patterns Detected:\n")
+	found := false
+	if p.MixedCase {
+		sb.WriteString("- Mixed case detected\n")
+		found = true
+	}
+	for _, r := range p.RepeatedChars {
+		fmt.Fprintf(&sb, "- Repeated characters: %q\n", r)
+		found = true
+	}
+	for _, n := range p.NumericSequences {
+		fmt.Fprintf(&sb, "- Numeric sequence: %q\n", n)
+		found = true
+	}
+	if !found {
+		sb.WriteString("- None detected\n")
+	}
+
+	fmt.Fprintf(&sb, "Complexity Score: %.2f%%\n", score)
+	fmt.Fprintf(&sb, "Art Dimensions: %d lines × %d characters", artHeight, artWidth)
+
+	return sb.String()
+}
+
+// Suggest генерирует список текстовых предложений на основе регистра,
+// пунктуации, количества слов и пробельных паттернов input. Последняя
+// строка всегда — размеры вывода.
+//
+// Suggest generates a list of text suggestions based on input's case,
+// punctuation, word count, and whitespace patterns. The last line is
+// always the output dimensions.
+func Suggest(input string, artHeight, artWidth int) []string {
+	var s []string
+
+	hasUpper, hasLower, hasPunct := false, false, false
+	for _, r := range input {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case strings.ContainsRune("!?.,;:", r):
+			hasPunct = true
+		}
+	}
+
+	if hasLower && !hasUpper {
+		s = append(s, "Try an all-uppercase version for more visual impact: "+strings.ToUpper(input))
+	}
+	if hasUpper && !hasLower {
+		s = append(s, "Try a lowercase version for a softer look: "+strings.ToLower(input))
+	}
+	if !hasPunct {
+		s = append(s, `Consider adding punctuation (e.g. "!") to give it more character`)
+	}
+
+	switch words := strings.Fields(input); len(words) {
+	case 0:
+	case 1:
+		s = append(s, "This is a single word; try a short phrase for a richer banner")
+	default:
+		s = append(s, fmt.Sprintf("This phrase has %d words; a shorter word may render more compactly", len(words)))
+	}
+
+	if strings.Contains(input, "  ") {
+		s = append(s, "Multiple consecutive spaces detected; consider collapsing them")
+	}
+	if strings.HasPrefix(input, " ") || strings.HasSuffix(input, " ") {
+		s = append(s, "Leading or trailing spaces detected; consider trimming them")
+	}
+
+	s = append(s, fmt.Sprintf("Output dimensions: %d lines × %d characters.", artHeight, artWidth))
+
+	return s
+}
+
+// FormatSuggestions форматирует блок "--- AI Suggestions ---" со списком
+// suggestions, каждое с префиксом "- ".
+//
+// FormatSuggestions formats the "--- AI Suggestions ---" block with the
+// suggestions list, each prefixed with "- ".
+func FormatSuggestions(suggestions []string) string {
+	var sb strings.Builder
+	sb.WriteString("--- AI Suggestions ---")
+	for _, s := range suggestions {
+		sb.WriteString("\n- ")
+		sb.WriteString(s)
+	}
+	return sb.String()
+}
