@@ -60,6 +60,8 @@ func TestRender(t *testing.T) {
 		{"trailing newline adds one blank line", args{"A\n", b}, []string{
 			"a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "",
 		}},
+		{"input is only one newline", args{"\n", b}, []string{""}},
+		{"input is only two newlines", args{"\n\n", b}, []string{"", ""}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

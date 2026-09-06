@@ -14,7 +14,9 @@
   символы описаны в диапазоне печатного ASCII `32..126` (пробел — тильда).
 - Пустая строка `""` — нет вывода вообще (0 строк).
 - `\n` — разделитель строк: непустой сегмент между разделителями даёт
-  8 строк ASCII-арта, пустой сегмент — одну пустую строку вывода.
+  8 строк ASCII-арта, пустой сегмент — одну пустую строку вывода. Если во
+  всей входной строке нет ничего, кроме `\n` (например, вход `"\n"`), число
+  пустых строк равно числу `\n`, а не числу сегментов.
 - Поддерживаемые символы: печатный ASCII `32-126` и `\n` (`banner.Validate`
   отклоняет всё остальное, например не-ASCII буквы или управляющие коды).
 
@@ -110,7 +112,9 @@ alternatives (`--suggest`).
 - An empty string `""` — no output at all (0 lines).
 - `\n` is a line separator: a non-empty segment between separators produces
   8 lines of ASCII art, an empty segment produces a single blank output
-  line.
+  line. If the entire input contains nothing but `\n` characters (e.g.
+  `"\n"`), the number of blank lines equals the number of `\n`, not the
+  number of segments.
 - Supported characters: printable ASCII `32-126` and `\n` (`banner.Validate`
   rejects everything else, e.g. non-ASCII letters or control codes).
 
