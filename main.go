@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"symbol-art/internal/analyzer"
 	"symbol-art/internal/banner"
@@ -29,7 +30,11 @@ func main() {
 		fmt.Println("Usage: go run . [--analyze] [--suggest] [--banner=standard|shadow|thinkertoy] STRING")
 		os.Exit(1)
 	}
-	input := args[0]
+	// Шелл (PowerShell, bash в обычных кавычках) передаёт "\n" как два
+	// литеральных символа — обратный слэш и "n", а не настоящий перевод
+	// строки. Render умеет работать только с настоящим \n (код 10),
+	// поэтому саму escape-последовательность нужно раскрыть здесь.
+	input := strings.ReplaceAll(args[0], `\n`, "\n")
 
 	// Проверяем ДО загрузки баннера: нет смысла читать файл шрифта,
 	// если строка всё равно содержит недопустимые символы.
